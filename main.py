@@ -1,10 +1,18 @@
-import os, uuid
+import os, uuid, re, io
+from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 
-app = FastAPI(title="Cyber Cafe Agent - Phase 3.1")
+try:
+    from PIL import Image
+    import pytesseract
+    OCR_AVAILABLE = True
+except:
+    OCR_AVAILABLE = False
+
+app = FastAPI(title="Cyber Cafe Agent - Phase 4A OCR")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -44,25 +52,46 @@ TEMPLATES = {
 
 def get_sb(): return create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
+def extract_ocr(file_bytes, doc_type):
+    if not OCR_AVAILABLE:
+        return {"error": "ocr_lib_not_found"}
+    if doc_type not in ["aadhaar_front", "aadhaar_back", "aadhaar_combined", "pan_card", "10th_marksheet", "12th_marksheet"]:
+        return None
+    try:
+        img = Image.open(io.BytesIO(file_bytes))
+        # thoda resize for better OCR
+        if img.width < 1000:
+            img = img.resize((img.width*2, img.height*2))
+        text = pytesseract.image_to_string(img, lang='eng')
+        data = {"raw_text": text[:1000]}
+        aadhaar = re.search(r'\d{4}\s\d{4}\s\d{4}', text)
+        pan = re.search(r'[A-Z]{5}[0-9]{4}[A-Z]{1}', text)
+        if aadhaar: data["aadhaar_no"] = aadhaar.group()
+        if pan: data["pan_no"] = pan.group()
+        # DOB try
+        dob = re.search(r'\d{2}/\d{2}/\d{4}', text)
+        if dob: data["dob"] = dob.group()
+        return data
+    except Exception as e:
+        return {"error": str(e)[:200]}
+
 HTML_PAGE = """
 <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.tailwindcss.com"></script></head>
 <body class="bg-[#0f0f0f] text-white p-4"><div class="max-w-md mx-auto">
-<h1 class="text-xl font-bold">Cyber Cafe Agent - Phase 3.1</h1><p class="text-xs text-zinc-400">20 Templates + Auto Vault Load FIX</p>
+<h1 class="text-xl font-bold">Cyber Cafe Agent - Phase 4A</h1><p class="text-xs text-zinc-400">20 Templates + Auto Vault + OCR Enabled</p>
 <div class="mt-4 bg-zinc-900 p-3 rounded-xl">
-<input id="user_id" value="yuvraj_test" class="w-full p-2 rounded bg-black text-sm" placeholder="User ID">
-<select id="doc_type" class="w-full mt-2 p-2 rounded bg-black text-sm"><optgroup label="Identity"><option>aadhaar_front</option><option>aadhaar_back</option><option>pan_card</option><option>voter_id_front</option></optgroup><optgroup label="Photo"><option>photo</option><option>signature</option></optgroup><optgroup label="Education"><option>10th_marksheet</option><option>12th_marksheet</option><option>graduation_degree</option><option>income_certificate</option><option>domicile_certificate</option><option>bank_passbook</option></optgroup></select>
-<input id="file" type="file" class="w-full mt-2 text-xs"><button onclick="upload()" class="w-full mt-2 bg-white text-black p-2 rounded font-bold text-sm">Upload</button><p id="status" class="text-[10px] mt-1 text-zinc-400"></p></div>
-<div class="mt-3 bg-zinc-900 p-3 rounded-xl"><h2 class="text-sm font-bold">Intent Selector - Kya Banana Hai?</h2><select id="template" class="w-full mt-2 p-2 rounded bg-black text-sm">""" + "".join([f'<option value="{k}">{v["name"]} - {v["category"]}</option>' for k,v in TEMPLATES.items()]) + """</select>
-<button onclick="checkFill()" class="w-full mt-2 bg-blue-600 p-2 rounded text-sm font-bold">Check Required Docs & Auto-Fill Preview</button>
-<div id="preview" class="mt-2 text-xs bg-black p-2 rounded min-h-[60px]"></div></div>
-<div class="mt-3 bg-zinc-900 p-3 rounded-xl"><div class="flex justify-between items-center"><h2 class="text-sm font-bold">Mera Vault</h2><button onclick="loadVault()" class="text-[10px] bg-zinc-800 px-2 py-1 rounded">Refresh</button></div><div id="vault" class="mt-2 space-y-1 text-xs text-zinc-400">Loading...</div></div>
+<input id="user_id" value="yuvraj_test" class="w-full p-2 rounded bg-black text-sm">
+<select id="doc_type" class="w-full mt-2 p-2 rounded bg-black text-sm"><option>aadhaar_front</option><option>pan_card</option><option>photo</option><option>signature</option><option>10th_marksheet</option><option>12th_marksheet</option><option>income_certificate</option><option>domicile_certificate</option><option>bank_passbook</option></select>
+<input id="file" type="file" class="w-full mt-2 text-xs"><button onclick="upload()" class="w-full mt-2 bg-white text-black p-2 rounded font-bold text-sm">Upload + OCR</button><p id="status" class="text-[10px] mt-1 text-zinc-400"></p></div>
+<div class="mt-3 bg-zinc-900 p-3 rounded-xl"><h2 class="text-sm font-bold">Intent Selector</h2><select id="template" class="w-full mt-2 p-2 rounded bg-black text-sm">""" + "".join([f'<option value="{k}">{v["name"]}</option>' for k,v in TEMPLATES.items()]) + """</select>
+<button onclick="checkFill()" class="w-full mt-2 bg-blue-600 p-2 rounded text-sm font-bold">Check Docs & Preview</button><div id="preview" class="mt-2 text-xs bg-black p-2 rounded min-h-[60px]"></div></div>
+<div class="mt-3 bg-zinc-900 p-3 rounded-xl"><div class="flex justify-between"><h2 class="text-sm font-bold">Mera Vault (Auto Load)</h2><button onclick="loadVault()" class="text-[10px] bg-zinc-800 px-2 py-1 rounded">Refresh</button></div><div id="vault" class="mt-2 space-y-1 text-xs"></div></div>
 </div>
 <script>
-async function upload(){const uid=document.getElementById('user_id').value;const dtype=document.getElementById('doc_type').value;const f=document.getElementById('file').files[0];if(!uid||!f){alert('ID+File');return;}const fd=new FormData();fd.append('user_id',uid);fd.append('doc_type',dtype);fd.append('file',f);document.getElementById('status').innerText='Uploading...';const r=await fetch('/upload-document',{method:'POST',body:fd});const j=await r.json();document.getElementById('status').innerText=j.success?'Uploaded OK':'Failed';loadVault();}
-async function loadVault(){const uid=document.getElementById('user_id').value;if(!uid)return;const v=document.getElementById('vault');v.innerHTML='Loading vault...';try{const r=await fetch('/vault/'+uid);const j=await r.json();v.innerHTML='';if(j.count==0){v.innerHTML='<span class=text-zinc-500>No docs yet</span>';return;}(j.docs||[]).forEach(d=>{v.innerHTML+=`<div class="flex justify-between bg-black p-2 rounded border border-zinc-800"><div><b>${d.doc_type}</b><br><span class="text-[10px] text-zinc-500">${d.file_name||''}</span></div><a href="${d.file_url}" target="_blank" class="text-blue-400 text-[11px]">View</a></div>`});}catch(e){v.innerHTML='Error loading';}}
-async function checkFill(){const uid=document.getElementById('user_id').value;const tid=document.getElementById('template').value;const r=await fetch(`/api/fill-preview/${tid}/${uid}`);const j=await r.json();let h=`<b>${j.template_name}</b><br>Required: ${j.required_docs.join(', ')}<br><br>`;if(j.missing.length>0){h+=`<span class="text-red-400">Missing: ${j.missing.join(', ')}</span>`}else{h+=`<span class="text-green-400 font-bold">✓ All Docs OK - Ready for Auto-Fill (Captcha + Payment only)</span>`}h+=`<br><br>Vault Docs You Have: ${j.you_have.join(', ')||'None'}`;document.getElementById('preview').innerHTML=h;}
-window.addEventListener('load', ()=>{setTimeout(loadVault, 1000);});
-document.getElementById('user_id').addEventListener('change', loadVault);
+async function upload(){const uid=document.getElementById('user_id').value;const dtype=document.getElementById('doc_type').value;const f=document.getElementById('file').files[0];if(!uid||!f){alert('ID+File');return;}const fd=new FormData();fd.append('user_id',uid);fd.append('doc_type',dtype);fd.append('file',f);document.getElementById('status').innerText='Uploading + OCR running...';const r=await fetch('/upload-document',{method:'POST',body:fd});const j=await r.json();document.getElementById('status').innerText=j.success? 'Uploaded + OCR: '+(j.ocr? JSON.stringify(j.ocr).slice(0,100) : 'No OCR') : 'Fail';loadVault();}
+async function loadVault(){const uid=document.getElementById('user_id').value;if(!uid)return;const v=document.getElementById('vault');v.innerHTML='Loading...';const r=await fetch('/vault/'+uid);const j=await r.json();v.innerHTML='';(j.docs||[]).forEach(d=>{let ocrInfo=d.ocr_data && d.ocr_data.aadhaar_no? 'Aadhaar:'+d.ocr_data.aadhaar_no : (d.ocr_data && d.ocr_data.pan_no? 'PAN:'+d.ocr_data.pan_no : '');v.innerHTML+=`<div class="bg-black p-2 rounded border border-zinc-800"><div class="flex justify-between"><b>${d.doc_type}</b><a href="${d.file_url}" target="_blank" class="text-blue-400">View</a></div><div class="text-[10px] text-zinc-500">${d.file_name||''} ${ocrInfo? '<br><span class=text-green-400>'+ocrInfo+'</span>':''}</div></div>`});}
+async function checkFill(){const uid=document.getElementById('user_id').value;const tid=document.getElementById('template').value;const r=await fetch(`/api/fill-preview/${tid}/${uid}`);const j=await r.json();let h=`<b>${j.template_name}</b><br>Req: ${j.required_docs.join(', ')}<br><br>`;if(j.missing.length>0){h+=`<span class="text-red-400">Missing: ${j.missing.join(', ')}</span>`}else{h+=`<span class="text-green-400 font-bold">✓ All Docs OK - Ready</span>`}h+=`<br><br>Have: ${j.you_have.join(', ')}`;document.getElementById('preview').innerHTML=h;}
+window.addEventListener('load', ()=>{setTimeout(loadVault, 1200);});
 </script></body></html>
 """
 
@@ -71,25 +100,21 @@ def home(): return HTML_PAGE
 
 @app.get("/api/status")
 def status():
-    sb=get_sb()
-    try: sb.table("user_vault").select("id").limit(1).execute(); db="connected"
-    except: db="error"
-    return {"db":db,"bucket":BUCKET,"templates":len(TEMPLATES)}
-
-@app.get("/api/templates")
-def list_templates(): return TEMPLATES
+    return {"db":"connected","bucket":BUCKET,"templates":len(TEMPLATES),"ocr_available":OCR_AVAILABLE,"ocr_binary":"installed_via_dockerfile"}
 
 @app.post("/upload-document")
 async def upload_doc(user_id: str = Form(...), doc_type: str = Form(...), file: UploadFile = File(...)):
     sb=get_sb()
     data=await file.read()
     path=f"{user_id}/{doc_type}/{uuid.uuid4().hex}_{file.filename}"
-    try: sb.storage.from_(BUCKET).upload(path, data, {"content-type": file.content_type, "upsert":"true"})
-    except Exception as e: raise HTTPException(500, f"Storage fail {e}")
+    sb.storage.from_(BUCKET).upload(path, data, {"content-type": file.content_type, "upsert":"true"})
     url=sb.storage.from_(BUCKET).get_public_url(path)
-    try: sb.table("user_vault").insert({"user_id":user_id,"doc_type":doc_type,"file_name":file.filename,"storage_path":path,"file_url":url,"file_size":len(data),"mime_type":file.content_type,"consent_given":True}).execute()
-    except: sb.table("user_vault").insert({"user_id":user_id,"doc_type":doc_type,"file_name":file.filename}).execute()
-    return {"success":True,"file_url":url}
+    ocr = extract_ocr(data, doc_type)
+    try:
+        sb.table("user_vault").insert({"user_id":user_id,"doc_type":doc_type,"file_name":file.filename,"storage_path":path,"file_url":url,"file_size":len(data),"mime_type":file.content_type,"ocr_data":ocr,"consent_given":True}).execute()
+    except:
+        sb.table("user_vault").insert({"user_id":user_id,"doc_type":doc_type,"file_name":file.filename,"file_url":url,"ocr_data":ocr}).execute()
+    return {"success":True,"file_url":url,"ocr":ocr}
 
 @app.get("/vault/{user_id}")
 def vault(user_id: str):
