@@ -32,7 +32,17 @@ TEMPLATES = {
     "up_police_constable": {"name":"UP Police Constable","category":"exam","official_url":"https://uppb.gov.in/","required_docs":["aadhaar_front","12th_marksheet","photo","signature","domicile_certificate"],"fields":[]},
     "up_scholarship": {"name":"UP Scholarship","category":"scholarship","official_url":"https://scholarship.up.gov.in/","required_docs":["aadhaar_front","income_certificate","10th_marksheet","bank_passbook","photo"],"fields":[]},
     "voter_new": {"name":"Voter ID New","category":"new","official_url":"https://voters.eci.gov.in/","required_docs":["aadhaar_front","photo","signature"],"fields":[]},
-    "ration_new": {"name":"Ration Card New","category":"new","official_url":"https://fcs.up.gov.in/","required_docs":["aadhaar_front","income_certificate","photo"],"fields":[]}
+    "ration_new": {"name":"Ration Card New","category":"new","official_url":"https://fcs.up.gov.in/","required_docs":["aadhaar_front","income_certificate","photo"],"fields":[]},
+    "ssc_cgl": {"name":"SSC CGL 2025","category":"exam","official_url":"https://ssc.nic.in/","required_docs":["aadhaar_front","graduation_marksheet","photo","signature"],"fields":[]},
+    "railway_group_d": {"name":"Railway Group D","category":"exam","official_url":"https://rrbcdg.gov.in/","required_docs":["aadhaar_front","10th_certificate","photo","signature","caste_certificate"],"fields":[]},
+    "cuet_ug": {"name":"CUET UG 2025","category":"exam","official_url":"https://cuet.samarth.ac.in/","required_docs":["aadhaar_front","12th_marksheet","photo","signature"],"fields":[]},
+    "nda": {"name":"NDA 2025","category":"exam","official_url":"https://upsc.gov.in/","required_docs":["aadhaar_front","12th_marksheet","photo","signature"],"fields":[]},
+    "ibps_po": {"name":"IBPS PO","category":"exam","official_url":"https://ibps.in/","required_docs":["aadhaar_front","graduation_degree","photo","signature","bank_passbook"],"fields":[]},
+    "passport_new": {"name":"Passport New","category":"new","official_url":"https://portal2.passportindia.gov.in/","required_docs":["aadhaar_front","pan_card","bank_passbook","photo"],"fields":[]},
+    "ews_new": {"name":"EWS Certificate","category":"certificate","official_url":"https://edistrict.up.gov.in/","required_docs":["aadhaar_front","income_certificate","photo"],"fields":[]},
+    "pan_correction": {"name":"PAN Correction","category":"correction","official_url":"https://www.tin-nsdl.com/","required_docs":["aadhaar_front","pan_card","photo"],"fields":[]},
+    "up_police_si": {"name":"UP Police SI","category":"exam","official_url":"https://uppbpb.gov.in/","required_docs":["aadhaar_front","graduation_degree","domicile_certificate","photo","signature"],"fields":[]},
+    "ayushman_new": {"name":"Ayushman Card","category":"new","official_url":"https://beneficiary.nha.gov.in/","required_docs":["aadhaar_front","ration_card","photo"],"fields":[]}
 }
 
 def get_sb(): return create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
