@@ -201,9 +201,12 @@ const TEMPLATES = {
   "ibps_po": {"name":"IBPS PO","category":"exam","required_docs":["aadhaar_front","graduation_degree","photo","signature","bank_passbook"]},
   "up_scholarship": {"name":"UP Scholarship","category":"scholarship","required_docs":["aadhaar_front","income_certificate","10th_marksheet","bank_passbook","photo"]}
 };
+const OFFICIAL_MAP = {
+ "aadhaar_correction":"https://myaadhaar.uidai.gov.in/","pan_new":"https://www.tin-nsdl.com/services/pan/","pan_correction":"https://www.tin-nsdl.com/services/pan/","income_certificate":"https://edistrict.up.gov.in/","domicile_certificate":"https://edistrict.up.gov.in/","caste_certificate":"https://edistrict.up.gov.in/","ews_new":"https://edistrict.up.gov.in/","voter_new":"https://voters.eci.gov.in/","passport_new":"https://portal2.passportindia.gov.in/","ayushman_new":"https://beneficiary.nha.gov.in/","ration_new":"https://fcs.up.gov.in/","ssc_gd":"https://ssc.nic.in/","ssc_cgl":"https://ssc.nic.in/","up_police_constable":"https://uppbpb.gov.in/","up_police_si":"https://uppbpb.gov.in/","railway_group_d":"https://www.rrbcdg.gov.in/","cuet_ug":"https://cuet.samarth.ac.in/","nda":"https://www.upsc.gov.in/","ibps_po":"https://www.ibps.in/","up_scholarship":"https://scholarship.up.gov.in/"
+};
 function filterCat(cat){
   document.querySelectorAll('.cat-btn').forEach(b=>{b.className='cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs';});
-  document.querySelector(`[data-cat="${cat}"]`).className='cat-btn whitespace-nowrap bg-white text-black px-4 py-2 rounded-full text-xs font-bold';
+  const active=document.querySelector(`[data-cat="${cat}"]`); if(active) active.className='cat-btn whitespace-nowrap bg-white text-black px-4 py-2 rounded-full text-xs font-bold';
   const sel=document.getElementById('template'); sel.innerHTML='';
   Object.entries(TEMPLATES).forEach(([k,v])=>{ if(cat==='all'||v.category===cat){ const o=document.createElement('option'); o.value=k; o.textContent=v.name; sel.appendChild(o); } });
 }
@@ -213,7 +216,7 @@ async function upload(){
   const fd=new FormData(); fd.append('user_id',uid); fd.append('doc_type',dtype); fd.append('file',f);
   document.getElementById('status').innerText='⏳ Uploading...';
   const r=await fetch('/upload-document',{method:'POST',body:fd}); const j=await r.json();
-  if(j.success){ document.getElementById('status').innerHTML='✅ <b>Uploaded!</b> OCR background me, 30 sec me Refresh dabana'; loadVault(); setTimeout(loadVault,30000); setTimeout(loadVault,60000); }
+  if(j.success){ document.getElementById('status').innerHTML='✅ <b>Uploaded!</b> 30 sec me Refresh'; loadVault(); setTimeout(loadVault,30000); }
 }
 async function loadVault(){
   const uid=document.getElementById('user_id').value; const v=document.getElementById('vault'); v.innerHTML='<p class="text-xs text-zinc-500">Loading...</p>';
@@ -222,57 +225,28 @@ async function loadVault(){
     let badge=''; let border='border-zinc-800';
     if(d.ocr_data?.aadhaar_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">Aadhaar:${d.ocr_data.aadhaar_no}</span>`; border='border-green-500/20';}
     else if(d.ocr_data?.pan_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">PAN:${d.ocr_data.pan_no}</span>`; border='border-green-500/20';}
-    else if(d.ocr_data?.status==='processing'){badge=`<span class="bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full text-[10px] animate-pulse">OCR processing...</span>`; border='border-yellow-500/20';}
-    v.innerHTML+=`<div class="bg-black border ${border} rounded-xl p-3 flex justify-between items-center"><div><p class="text-xs font-bold">${d.doc_type}</p><p class="text-[10px] text-zinc-500 truncate w-[150px]">${d.file_name||''}</p><div class="mt-1">${badge}</div></div><div class="flex gap-2 items-center"><button onclick="deleteDoc('${d.id}')" class="text-[10px] text-red-400 border border-red-500/20 bg-red-500/10 px-2 py-1 rounded-full">Del</button><a href="${d.file_url}" target="_blank" class="text-[11px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">View</a></div></div>`;
+    else if(d.ocr_data?.status==='processing'){badge=`<span class="bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full text-[10px]">Processing...</span>`;}
+    v.innerHTML+=`<div class="bg-black border ${border} rounded-xl p-3 flex justify-between items-center"><div><p class="text-xs font-bold">${d.doc_type}</p><p class="text-[10px] text-zinc-500 truncate w-[150px]">${d.file_name||''}</p><div class="mt-1">${badge}</div></div><div class="flex gap-2"><button onclick="deleteDoc('${d.id}')" class="text-[10px] text-red-400 border border-red-500/20 bg-red-500/10 px-2 py-1 rounded-full">Del</button><a href="${d.file_url}" target="_blank" class="text-[11px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">View</a></div></div>`;
   });
 }
-async function deleteDoc(id){
-  if(!confirm('Ye document delete kar du?')) return;
-  await fetch('/vault/'+id,{method:'DELETE'});
-  loadVault();
-}
+async function deleteDoc(id){ if(!confirm('Delete kar du?')) return; await fetch('/vault/'+id,{method:'DELETE'}); loadVault(); }
 async function checkFill(){
-const officialMap = {
- "aadhaar_correction":"https://myaadhaar.uidai.gov.in/",
- "pan_new":"https://www.tin-nsdl.com/services/pan/",
- "pan_correction":"https://www.tin-nsdl.com/services/pan/",
- "income_certificate":"https://edistrict.up.gov.in/",
- "domicile_certificate":"https://edistrict.up.gov.in/",
- "caste_certificate":"https://edistrict.up.gov.in/",
- "ews_new":"https://edistrict.up.gov.in/",
- "voter_new":"https://voters.eci.gov.in/",
- "passport_new":"https://portal2.passportindia.gov.in/",
- "ayushman_new":"https://beneficiary.nha.gov.in/",
- "ration_new":"https://fcs.up.gov.in/",
- "ssc_gd":"https://ssc.nic.in/",
- "ssc_cgl":"https://ssc.nic.in/",
- "up_police_constable":"https://uppbpb.gov.in/",
- "up_police_si":"https://uppbpb.gov.in/",
- "railway_group_d":"https://www.rrbcdg.gov.in/",
- "cuet_ug":"https://cuet.samarth.ac.in/",
- "nda":"https://www.upsc.gov.in/",
- "ibps_po":"https://www.ibps.in/",
- "up_scholarship":"https://scholarship.up.gov.in/"
-};
-const official = officialMap[tid];
-if(official && j.missing.length==0){
-  h+=`<a href="${official}" target="_blank" class="mt-3 block text-center bg-white text-black rounded-xl p-3 font-bold">Go to Official Portal →</a>`;
-}
-  const uid=document.getElementById('user_id').value; const tid=document.getElementById('template').value;
-  const r=await fetch(`/api/fill-preview/${tid}/${uid}`); const j=await r.json();
-  let h=`<p class="font-bold text-white">${j.template_name}</p><p class="text-[11px] text-zinc-500 mt-1">Need: ${j.required_docs.join(', ')}</p>`;
-  if(j.missing.length>0) h+=`<div class="mt-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-red-300">❌ Missing: ${j.missing.join(', ')}</div>`;
-  else h+=`<div class="mt-2 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-green-300 font-bold">✅ Ready to Apply</div>`;
-  document.getElementById('preview').innerHTML=h;
+  const uid=document.getElementById('user_id').value; const tid=document.getElementById('template').value; const preview=document.getElementById('preview');
+  preview.innerHTML='Checking...';
+  try{
+    const r=await fetch(`/api/fill-preview/${tid}/${uid}`); const j=await r.json();
+    let h=`<p class="font-bold text-white">${j.template_name}</p><p class="text-[11px] text-zinc-500 mt-1">Need: ${j.required_docs.join(', ')}</p>`;
+    if(j.missing.length>0) h+=`<div class="mt-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-red-300 text-[11px]">❌ Missing: ${j.missing.join(', ')}</div>`;
+    else h+=`<div class="mt-2 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-green-300 font-bold text-[11px]">✅ Ready to Apply</div>`;
+    h+=`<p class="text-[10px] text-zinc-500 mt-2">You have: ${j.you_have.join(', ')||'none'}</p>`;
+    const official=OFFICIAL_MAP[tid];
+    if(official && j.missing.length==0){ h+=`<a href="${official}" target="_blank" class="mt-3 block text-center bg-white text-black rounded-xl p-3 font-bold text-sm">Go to Official Portal →</a>`; }
+    preview.innerHTML=h;
+  }catch(e){ preview.innerHTML=`<span class="text-red-400 text-[11px]">Error: ${e}</span>`; }
 }
 window.addEventListener('load', ()=>{
-  // consent popup auto hide if already agreed
-  if(localStorage.getItem('dpdp')==='yes'){
-    const m = document.getElementById('consentModal');
-    if(m) m.style.display='none';
-  }
-  filterCat('all'); 
-  setTimeout(loadVault,800);
+  if(localStorage.getItem('dpdp')==='yes'){ const m=document.getElementById('consentModal'); if(m) m.style.display='none'; }
+  filterCat('all'); setTimeout(loadVault,800);
 });
 </script></body></html>
 """
