@@ -11,7 +11,7 @@ try:
 except:
     OCR_AVAILABLE = False
 
-app = FastAPI(title="Cyber Cafe Agent - Phase 4C")
+app = FastAPI(title="Cyber Cafe Agent - Phase 5 Smart Fill")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -41,14 +41,70 @@ TEMPLATES = {
   "up_scholarship": {"name":"UP Scholarship","category":"scholarship","required_docs":["aadhaar_front","income_certificate","10th_marksheet","bank_passbook","photo"]}
 }
 OFFICIAL_URLS = {
- "aadhaar_correction":"https://myaadhaar.uidai.gov.in/","pan_new":"https://www.tin-nsdl.com/services/pan/","pan_correction":"https://www.tin-nsdl.com/services/pan/","income_certificate":"https://edistrict.up.gov.in/","domicile_certificate":"https://edistrict.up.gov.in/","caste_certificate":"https://edistrict.up.gov.in/","ews_new":"https://edistrict.up.gov.in/","voter_new":"https://voters.eci.gov.in/","passport_new":"https://portal2.passportindia.gov.in/","ayushman_new":"https://beneficiary.nha.gov.in/","ration_new":"https://fcs.up.gov.in/","ssc_gd":"https://ssc.nic.in/","ssc_cgl":"https://ssc.nic.in/","up_police_constable":"https://uppbpb.gov.in/","up_police_si":"https://uppbpb.gov.in/","railway_group_d":"https://www.rrbcdg.gov.in/","cuet_ug":"https://cuet.samarth.ac.in/","nda":"https://www.upsc.gov.in/","ibps_po":"https://www.ibps.in/","up_scholarship":"https://scholarship.up.gov.in/"
+ "aadhaar_correction":"https://myaadhaar.uidai.gov.in/","pan_new":"https://www.tin-nsdl.com/services/pan/","pan_correction":"https://www.tin-nsdl.com/services/pan/","income_certificate":"https://edistrict.up.gov.in/","domicile_certificate":"https://edistrict.up.gov.in/","caste_certificate":"https://edistrict.up.gov.in/","ews_new":"https://edistrict.up.gov.in/","voter_new":"https://voters.eci.gov.in/","passport_new":"https://portal2.passportindia.gov.in/","ayushman_new":"https://beneficiary.nha.gov.in/","ration_new":"https://fcs.up.gov.in/","ssc_gd":"https://ssc.gov.in/","ssc_cgl":"https://ssc.gov.in/","up_police_constable":"https://uppbpb.gov.in/","up_police_si":"https://uppbpb.gov.in/","railway_group_d":"https://www.rrbcdg.gov.in/","cuet_ug":"https://cuet.samarth.ac.in/","nda":"https://www.upsc.gov.in/","ibps_po":"https://www.ibps.in/","up_scholarship":"https://scholarship.up.gov.in/"
 }
 
 def get_sb():
     return create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
+def parse_smart_ocr(text):
+    data = {}
+    if not text or len(text.strip())<5:
+        return data
+    m = re.search(r'\b\d{4}\s\d{4}\s\d{4}\b', text)
+    if m: data["aadhaar_no"] = m.group().strip()
+    m2 = re.search(r'\b[A-Z]{5}[0-9]{4}[A-Z]\b', text)
+    if m2: data["pan_no"] = m2.group().strip()
+    dob = re.search(r'(?:DOB|Date of Birth|D\.O\.B|Birth)[^\d]{0,10}(\d{2}[/-]\d{2}[/-]\d{4})', text, re.I)
+    if not dob:
+        dob = re.search(r'\b(\d{2}/\d{4})\b', text)
+    if dob:
+        data["dob"] = dob.group(1)
+    yob = re.search(r'(?:Year of Birth|YOB)[^\d]{0,5}(\d{4})', text, re.I)
+    if yob and "dob" not in data:
+        data["dob"] = yob.group(1)
+        data["yob"] = yob.group(1)
+    g = re.search(r'\b(MALE|FEMALE)\b', text, re.I)
+    if g:
+        data["gender"] = g.group(1).upper()
+    pin = re.search(r'\b[1-8]\d{5}\b', text)
+    if pin:
+        data["pincode"] = pin.group(0)
+    lines = [l.strip() for l in text.split('\n') if l.strip() and len(l.strip())>2]
+    blacklist = ['GOVT','GOVERNMENT','INDIA','AADHAAR','UIDAI','INCOME TAX','DEPARTMENT','DOB','MALE','FEMALE','ENROLMENT','ELECTION','PASSPORT']
+    candidates = []
+    for line in lines[:8]:
+        up = line.upper()
+        if any(b in up for b in blacklist):
+            continue
+        if re.search(r'\d', line):
+            continue
+        if any(c in line for c in [':','@','/']):
+            continue
+        words = line.split()
+        if 2 <= len(words) <= 4 and len(line) >= 5:
+            if re.match(r'^[A-Za-z\s\.]+$', line):
+                candidates.append(line.strip())
+    if candidates:
+        data["full_name"] = candidates[0].title()
+        if len(candidates)>1 and "full_name" in data and len(candidates[0])<4:
+            data["full_name"] = candidates[1].title()
+    if "pincode" in data:
+        for i, line in enumerate(lines):
+            if data["pincode"] in line:
+                addr_lines = lines[max(0,i-2):i]
+                addr = " ".join(addr_lines)
+                if len(addr)>10:
+                    data["address"] = addr[:150]
+                break
+    so = re.search(r'(?:S/O|D/O|W/O|C/O|S\/O|D\/O)\s*:?\s*([A-Za-z\s]{5,40})', text, re.I)
+    if so:
+        data["father_or_guardian"] = so.group(1).strip().title()
+    return data
+
 def extract_ocr(file_bytes, doc_type):
-    if doc_type not in ["aadhaar_front","aadhaar_back","aadhaar_combined","pan_card"]: return None
+    if doc_type not in ["aadhaar_front","aadhaar_back","aadhaar_combined","pan_card"]:
+        return {"status":"no_ocr_needed", "doc_type": doc_type}
     try:
         import pytesseract
         pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
@@ -58,51 +114,51 @@ def extract_ocr(file_bytes, doc_type):
             img = img.resize((1200, h))
         img = img.convert('L')
         text = pytesseract.image_to_string(img, config='--oem 3 --psm 6')
-        data = {}
-        aadhaar = re.search(r'\d{4}\s\d{4}\s\d{4}', text)
-        pan = re.search(r'[A-Z]{5}[0-9]{4}[A-Z]{1}', text)
-        if aadhaar: data["aadhaar_no"] = aadhaar.group()
-        if pan: data["pan_no"] = pan.group()
-        return data if data else None
-    except: return None
+        parsed = parse_smart_ocr(text)
+        if not parsed:
+            return {"status":"ocr_done_no_data"}
+        return parsed
+    except Exception as e:
+        return {"status":"ocr_failed", "error": str(e)[:100]}
 
 def do_ocr_background(record_id, file_bytes, doc_type):
     try:
         ocr = extract_ocr(file_bytes, doc_type)
         if ocr:
             sb = get_sb()
-            sb.table("user_vault").update({"ocr_data": ocr}).eq("id", record_id).execute()
-    except: pass
+            if sb:
+                sb.table("user_vault").update({"ocr_data": ocr}).eq("id", record_id).execute()
+    except:
+        pass
 
 HTML_PAGE = """
 <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyberCafe Agent - Phase 5</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>body{font-family:'Inter',sans-serif}</style>
+<style>body{font-family:'Inter',sans-serif}.scroll-hide::-webkit-scrollbar{display:none}</style>
 </head>
 <body class="bg-[#08080A] text-white min-h-screen">
 <div id="consentModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99] flex items-center justify-center p-4">
 <div class="bg-[#121214] border border-zinc-700 rounded-[20px] p-5 max-w-[380px] w-full">
 <h3 class="font-bold text-sm">🔒 DPDP Consent (Govt. Rule)</h3>
-<p class="text-[11px] text-zinc-400 mt-2">Aapke documents sirf is form ko bharne ke liye use honge, Supabase encrypted vault me save rahenge. 30 din me auto delete.</p>
+<p class="text-[11px] text-zinc-400 mt-2">Aapke documents sirf is form ko bharne ke liye use honge, Supabase encrypted vault me save rahenge. 30 din me auto delete. CAPTCHA/OTP/PAYMENT aap khud karenge - 100% Legal.</p>
 <label class="flex gap-2 mt-3 text-[11px]"><input type="checkbox" id="consentCheck"> <span>Main sehmat hu, apne docs upload karne ke liye</span></label>
 <button onclick="if(document.getElementById('consentCheck').checked){document.getElementById('consentModal').style.display='none'; localStorage.setItem('dpdp','yes')}else{alert('Pehle tick karo')}" class="w-full mt-3 bg-white text-black rounded-xl p-3 text-sm font-bold">I Agree & Continue</button>
 </div></div>
-
-<div class="max-w-[480px] mx-auto p-4">
+<div class="max-w-[480px] mx-auto p-4 pb-20">
 <div class="flex justify-between items-center mb-5">
-<div class="flex items-center gap-2"><div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center font-black">C</div><div><h1 class="font-extrabold leading-none">CyberCafe Agent</h1><p class="text-[10px] text-zinc-500">Phase 4C • Fast + OCR + Consent</p></div></div>
+<div class="flex items-center gap-2"><div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center font-black">C</div><div><h1 class="font-extrabold leading-none">CyberCafe Agent</h1><p class="text-[10px] text-zinc-500">Phase 5 • Smart Fill Engine</p></div></div>
 <div class="flex items-center gap-2 text-[10px]"><span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span><span class="bg-zinc-900 border border-zinc-800 px-2 py-1 rounded-full">LIVE</span></div>
 </div>
-
 <div class="bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
-<div class="flex justify-between items-center mb-3"><p class="text-xs font-semibold text-zinc-400">👤 Operator ID</p><span class="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full">Auto Vault ON</span></div>
-<input id="user_id" value="yuvraj_test" class="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm">
+<div class="flex justify-between items-center mb-3"><p class="text-xs font-semibold text-zinc-400">👤 Student ID / Mobile No.</p><span class="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full">Auto Vault ON • ₹99/mo</span></div>
+<input id="user_id" value="yuvraj_test" placeholder="Apna Mobile No. dalo - yahi Vault ID hai" class="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm">
+<p class="text-[10px] text-zinc-500 mt-2">Yehi tumhara permanent ID hai. Isi se saare docs save rahenge.</p>
 </div>
-
 <div class="mt-4 bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
 <h2 class="font-bold text-[13px]">🎯 INTENT SELECTOR</h2>
-<div class="flex gap-2 mt-3 overflow-x-auto pb-2">
+<div class="flex gap-2 mt-3 overflow-x-auto pb-2 scroll-hide">
 <button onclick="filterCat('all')" data-cat="all" class="cat-btn whitespace-nowrap bg-white text-black px-4 py-2 rounded-full text-xs font-bold">All Forms</button>
 <button onclick="filterCat('exam')" data-cat="exam" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">📚 Exam</button>
 <button onclick="filterCat('certificate')" data-cat="certificate" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">📜 Certificate</button>
@@ -111,29 +167,43 @@ HTML_PAGE = """
 <button onclick="filterCat('scholarship')" data-cat="scholarship" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">🎓 Scholarship</button>
 </div>
 <select id="template" class="w-full mt-2 bg-black border border-zinc-800 rounded-xl p-3 text-sm"></select>
-<button onclick="checkFill()" class="w-full mt-3 bg-gradient-to-r from-violet-600 to-blue-600 rounded-xl p-3 text-sm font-bold">Check Docs & Preview →</button>
-<div id="preview" class="mt-3 bg-[#0A0A0B] border border-dashed border-zinc-800 rounded-xl p-3 min-h-[70px] text-xs text-zinc-500">Select a form to see required docs</div>
+<button onclick="checkFill()" class="w-full mt-3 bg-gradient-to-r from-violet-600 to-blue-600 rounded-xl p-3 text-sm font-bold">✨ Check Docs + Smart Fill →</button>
+<div id="preview" class="mt-3 bg-[#0A0A0B] border border-dashed border-zinc-800 rounded-xl p-3 min-h-[70px] text-xs text-zinc-500">Form select karo, fir Smart Fill dekho</div>
+<div id="smartBox" class="mt-3 hidden"></div>
 </div>
-
 <div class="mt-4 bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
-<div class="flex justify-between items-center"><h2 class="font-bold text-[13px]">⚡ FAST UPLOAD</h2><span class="text-[10px] bg-violet-500/10 text-violet-300 border border-violet-500/20 px-2 py-0.5 rounded-full">BG OCR ON</span></div>
+<div class="flex justify-between items-center"><h2 class="font-bold text-[13px]">⚡ FAST UPLOAD (BG OCR)</h2><span class="text-[10px] bg-violet-500/10 text-violet-300 border border-violet-500/20 px-2 py-0.5 rounded-full">BG OCR ON</span></div>
 <select id="doc_type" class="w-full mt-3 bg-black border border-zinc-800 rounded-xl p-3 text-sm">
-<option>aadhaar_front</option><option>aadhaar_back</option><option>pan_card</option><option>photo</option><option>signature</option><option>10th_marksheet</option><option>10th_certificate</option><option>12th_marksheet</option><option>graduation_marksheet</option><option>graduation_degree</option><option>income_certificate</option><option>domicile_certificate</option><option>caste_certificate</option><option>bank_passbook</option><option>ration_card</option>
+<option value="aadhaar_front">aadhaar_front - Aadhaar Front (Smart Fill)</option>
+<option value="aadhaar_back">aadhaar_back</option>
+<option value="pan_card">pan_card - PAN Card (Smart Fill)</option>
+<option value="photo">photo - Passport Photo</option>
+<option value="signature">signature</option>
+<option value="10th_marksheet">10th_marksheet</option>
+<option value="10th_certificate">10th_certificate</option>
+<option value="12th_marksheet">12th_marksheet</option>
+<option value="graduation_marksheet">graduation_marksheet</option>
+<option value="graduation_degree">graduation_degree</option>
+<option value="income_certificate">income_certificate</option>
+<option value="domicile_certificate">domicile_certificate</option>
+<option value="caste_certificate">caste_certificate</option>
+<option value="bank_passbook">bank_passbook</option>
+<option value="ration_card">ration_card</option>
 </select>
 <label class="mt-3 flex flex-col items-center justify-center w-full border-2 border-dashed border-zinc-800 rounded-xl p-4 bg-black/50">
 <span class="text-xs text-zinc-400">📁 Tap to choose file</span><span id="fname" class="text-[11px] text-zinc-500 mt-1">No file chosen</span>
 <input id="file" type="file" class="hidden" onchange="document.getElementById('fname').innerText=this.files[0]?.name||'No file chosen'">
 </label>
-<button onclick="upload()" class="w-full mt-3 bg-white text-black rounded-xl p-3 text-sm font-extrabold">Upload Fast</button>
+<button onclick="upload()" class="w-full mt-3 bg-white text-black rounded-xl p-3 text-sm font-extrabold">Upload Fast - 2 Sec</button>
 <p id="status" class="text-[11px] mt-2 text-zinc-400"></p>
 </div>
-
 <div class="mt-4 bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
-<div class="flex justify-between items-center"><h2 class="font-bold text-[13px]">🗄️ MERA VAULT</h2><button onclick="loadVault()" class="text-[11px] bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full">Refresh ↻</button></div>
+<div class="flex justify-between items-center"><h2 class="font-bold text-[13px]">🗄️ MERA VAULT + SMART DATA</h2><button onclick="loadVault()" class="text-[11px] bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full">Refresh ↻</button></div>
 <div id="vault" class="mt-3 space-y-2"></div>
+<p class="text-[10px] text-zinc-600 mt-3">Note: CAPTCHA, OTP, PAYMENT aap khud karenge official site pe - Agent kabhi nahi karega. 100% Legal & Safe.</p>
 </div>
+<div class="mt-4 text-center text-[10px] text-zinc-600">Made for Students - Kanpur UP • ₹99/mo Unlimited Forms • Cyber Cafe Jana Band</div>
 </div>
-
 <script>
 const TEMPLATES = {
   "aadhaar_correction": {"name":"Aadhaar Correction","category":"correction","required_docs":["aadhaar_front","photo"]},
@@ -158,55 +228,100 @@ const TEMPLATES = {
   "up_scholarship": {"name":"UP Scholarship","category":"scholarship","required_docs":["aadhaar_front","income_certificate","10th_marksheet","bank_passbook","photo"]}
 };
 const OFFICIAL_MAP = {
- "aadhaar_correction":"https://myaadhaar.uidai.gov.in/","pan_new":"https://www.tin-nsdl.com/services/pan/","pan_correction":"https://www.tin-nsdl.com/services/pan/","income_certificate":"https://edistrict.up.gov.in/","domicile_certificate":"https://edistrict.up.gov.in/","caste_certificate":"https://edistrict.up.gov.in/","ews_new":"https://edistrict.up.gov.in/","voter_new":"https://voters.eci.gov.in/","passport_new":"https://portal2.passportindia.gov.in/","ayushman_new":"https://beneficiary.nha.gov.in/","ration_new":"https://fcs.up.gov.in/","ssc_gd":"https://ssc.nic.in/","ssc_cgl":"https://ssc.nic.in/","up_police_constable":"https://uppbpb.gov.in/","up_police_si":"https://uppbpb.gov.in/","railway_group_d":"https://www.rrbcdg.gov.in/","cuet_ug":"https://cuet.samarth.ac.in/","nda":"https://www.upsc.gov.in/","ibps_po":"https://www.ibps.in/","up_scholarship":"https://scholarship.up.gov.in/"
+ "aadhaar_correction":"https://myaadhaar.uidai.gov.in/","pan_new":"https://www.tin-nsdl.com/services/pan/","pan_correction":"https://www.tin-nsdl.com/services/pan/","income_certificate":"https://edistrict.up.gov.in/","domicile_certificate":"https://edistrict.up.gov.in/","caste_certificate":"https://edistrict.up.gov.in/","ews_new":"https://edistrict.up.gov.in/","voter_new":"https://voters.eci.gov.in/","passport_new":"https://portal2.passportindia.gov.in/","ayushman_new":"https://beneficiary.nha.gov.in/","ration_new":"https://fcs.up.gov.in/","ssc_gd":"https://ssc.gov.in/","ssc_cgl":"https://ssc.gov.in/","up_police_constable":"https://uppbpb.gov.in/","up_police_si":"https://uppbpb.gov.in/","railway_group_d":"https://www.rrbcdg.gov.in/","cuet_ug":"https://cuet.samarth.ac.in/","nda":"https://www.upsc.gov.in/","ibps_po":"https://www.ibps.in/","up_scholarship":"https://scholarship.up.gov.in/"
 };
 function filterCat(cat){
-  document.querySelectorAll('.cat-btn').forEach(b=>{b.className='cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs';});
+  document.querySelectorAll('.cat-btn').forEach(b=>{ b.className='cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs'; });
   const active=document.querySelector(`[data-cat="${cat}"]`); if(active) active.className='cat-btn whitespace-nowrap bg-white text-black px-4 py-2 rounded-full text-xs font-bold';
   const sel=document.getElementById('template'); sel.innerHTML='';
   Object.entries(TEMPLATES).forEach(([k,v])=>{ if(cat==='all'||v.category===cat){ const o=document.createElement('option'); o.value=k; o.textContent=v.name; sel.appendChild(o); } });
 }
 async function upload(){
   const uid=document.getElementById('user_id').value; const dtype=document.getElementById('doc_type').value; const f=document.getElementById('file').files[0];
+  if(!uid){alert('Student ID / Mobile No. dalo');return;}
   if(!f){alert('File choose kar');return;}
   const fd=new FormData(); fd.append('user_id',uid); fd.append('doc_type',dtype); fd.append('file',f);
-  document.getElementById('status').innerText='⏳ Uploading...';
+  document.getElementById('status').innerText='⏳ Uploading 2 sec...';
   try{
     const r=await fetch('/upload-document',{method:'POST',body:fd}); const j=await r.json();
-    if(j.success){ document.getElementById('status').innerHTML='✅ Uploaded! 30 sec me Refresh'; loadVault(); setTimeout(loadVault,30000); }
+    if(j.success){ document.getElementById('status').innerHTML='✅ Uploaded! Smart Fill 10 sec me ayega. Refresh dabao'; loadVault(); setTimeout(loadVault,8000); }
     else document.getElementById('status').innerText='Fail';
   }catch(e){ document.getElementById('status').innerText='Error: '+e; }
 }
 async function loadVault(){
-  const uid=document.getElementById('user_id').value; const v=document.getElementById('vault'); v.innerHTML='<p class="text-xs text-zinc-500">Loading...</p>';
+  const uid=document.getElementById('user_id').value; if(!uid) return;
+  const v=document.getElementById('vault'); v.innerHTML='<p class="text-xs text-zinc-500">Loading Smart Data...</p>';
   try{
     const r=await fetch('/vault/'+uid); const j=await r.json(); v.innerHTML='';
+    if((j.docs||[]).length==0){ v.innerHTML='<p class="text-[11px] text-zinc-600">Abhi koi doc nahi. Aadhaar Front upload karo Smart Fill ke liye.</p>'; return; }
     (j.docs||[]).forEach(d=>{
-      let badge=''; let border='border-zinc-800';
-      if(d.ocr_data?.aadhaar_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">Aadhaar:${d.ocr_data.aadhaar_no}</span>`; border='border-green-500/20';}
-      else if(d.ocr_data?.pan_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">PAN:${d.ocr_data.pan_no}</span>`; border='border-green-500/20';}
-      else if(d.ocr_data?.status==='processing'){badge=`<span class="bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full text-[10px]">Processing...</span>`;}
-      v.innerHTML+=`<div class="bg-black border ${border} rounded-xl p-3 flex justify-between items-center"><div><p class="text-xs font-bold">${d.doc_type}</p><p class="text-[10px] text-zinc-500 truncate w-[150px]">${d.file_name||''}</p><div class="mt-1">${badge}</div></div><div class="flex gap-2"><button onclick="deleteDoc('${d.id}')" class="text-[10px] text-red-400 border border-red-500/20 bg-red-500/10 px-2 py-1 rounded-full">Del</button><a href="${d.file_url}" target="_blank" class="text-[11px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">View</a></div></div>`;
+      let badge=''; let border='border-zinc-800'; let smartInfo='';
+      const oc = d.ocr_data||{};
+      if(oc.full_name || oc.aadhaar_no || oc.pan_no){
+        border='border-green-500/20';
+        if(oc.full_name) smartInfo+=`<span class="bg-violet-500/10 text-violet-300 border border-violet-500/20 px-2 py-0.5 rounded-full text-[10px] mr-1">👤 ${oc.full_name}</span>`;
+        if(oc.aadhaar_no) badge+=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px] mr-1">${oc.aadhaar_no}</span>`;
+        if(oc.dob) badge+=`<span class="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full text-[10px] mr-1">DOB:${oc.dob}</span>`;
+        if(oc.pan_no) badge+=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px] mr-1">PAN:${oc.pan_no}</span>`;
+        if(oc.gender) badge+=`<span class="bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-full text-[10px] mr-1">${oc.gender}</span>`;
+      } else if(oc.status==='processing'){
+        badge=`<span class="bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full text-[10px]">Processing Smart Fill...</span>`;
+      }
+      v.innerHTML+=`<div class="bg-black border ${border} rounded-xl p-3"><div class="flex justify-between items-start"><div><p class="text-xs font-bold">${d.doc_type}</p><p class="text-[10px] text-zinc-500 truncate w-[160px]">${d.file_name||''}</p><div class="mt-1 flex flex-wrap gap-1">${smartInfo}${badge}</div></div><div class="flex gap-2"><button onclick="deleteDoc('${d.id}')" class="text-[10px] text-red-400 border border-red-500/20 bg-red-500/10 px-2 py-1 rounded-full">Del</button><a href="${d.file_url}" target="_blank" class="text-[11px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">View</a></div></div></div>`;
     });
   }catch(e){ v.innerHTML='<p class="text-red-400 text-xs">Vault load fail</p>'; }
 }
 async function deleteDoc(id){ if(!confirm('Delete?')) return; await fetch('/vault/'+id,{method:'DELETE'}); loadVault(); }
 async function checkFill(){
-  const uid=document.getElementById('user_id').value; const tid=document.getElementById('template').value; const preview=document.getElementById('preview');
+  const uid=document.getElementById('user_id').value; const tid=document.getElementById('template').value;
+  const preview=document.getElementById('preview'); const smartBox=document.getElementById('smartBox');
+  if(!uid){ alert('Pehle Student ID dalo'); return; }
   if(!tid){ preview.innerHTML='Form select karo'; return; }
-  preview.innerHTML='Checking...';
+  preview.innerHTML='⏳ Smart Fill Engine soch raha hai...';
+  smartBox.classList.add('hidden');
   try{
-    const r=await fetch(`/api/fill-preview/${tid}/${uid}`);
+    const r=await fetch(`/api/smart-fill/${tid}/${uid}`);
     if(!r.ok){ preview.innerHTML=`<span class="text-red-400">API Error ${r.status}</span>`; return; }
     const j=await r.json();
     let h=`<p class="font-bold text-white">${j.template_name}</p><p class="text-[11px] text-zinc-500 mt-1">Need: ${j.required_docs.join(', ')}</p>`;
-    if(j.missing.length>0) h+=`<div class="mt-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-red-300 text-[11px]">❌ Missing: ${j.missing.join(', ')}</div>`;
-    else h+=`<div class="mt-2 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-green-300 font-bold text-[11px]">✅ Ready to Apply</div>`;
+    if(j.missing.length>0) h+=`<div class="mt-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-red-300 text-[11px]">❌ Missing Docs: ${j.missing.join(', ')}</div>`;
+    else h+=`<div class="mt-2 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-green-300 font-bold text-[11px]">✅ Docs Ready - Smart Fill Ready</div>`;
     h+=`<p class="text-[10px] text-zinc-500 mt-2">You have: ${j.you_have.join(', ')||'none'}</p>`;
-    const official=OFFICIAL_MAP[tid];
-    if(official && j.missing.length==0){ h+=`<a href="${official}" target="_blank" class="mt-3 block text-center bg-white text-black rounded-xl p-3 font-bold text-sm">Go to Official Portal →</a>`; }
     preview.innerHTML=h;
+    let sh=`<div class="bg-gradient-to-br from-violet-500/10 to-blue-500/10 border border-violet-500/20 rounded-xl p-3">`;
+    sh+=`<p class="font-bold text-[12px]">✨ Smart Fill Engine - Auto Extracted</p>`;
+    const af=j.auto_filled||{};
+    if(Object.keys(af).length==0){
+      sh+=`<p class="text-[11px] text-zinc-500 mt-2">Aadhaar/PAN upload karo, tabhi naam/DOB auto ayega. Abhi kuch nahi mila.</p>`;
+    } else {
+      sh+=`<div class="mt-2 space-y-1">`;
+      if(af.full_name) sh+=`<div class="flex justify-between text-[11px]"><span class="text-zinc-400">Full Name</span><span class="font-bold text-white">${af.full_name} ✅</span></div>`;
+      if(af.dob) sh+=`<div class="flex justify-between text-[11px]"><span class="text-zinc-400">DOB</span><span class="font-bold text-white">${af.dob} ✅</span></div>`;
+      if(af.gender) sh+=`<div class="flex justify-between text-[11px]"><span class="text-zinc-400">Gender</span><span class="font-bold">${af.gender} ✅</span></div>`;
+      if(af.aadhaar_no) sh+=`<div class="flex justify-between text-[11px]"><span class="text-zinc-400">Aadhaar No</span><span class="font-mono text-green-300">${af.aadhaar_no} ✅</span></div>`;
+      if(af.pan_no) sh+=`<div class="flex justify-between text-[11px]"><span class="text-zinc-400">PAN No</span><span class="font-mono text-green-300">${af.pan_no} ✅</span></div>`;
+      if(af.pincode) sh+=`<div class="flex justify-between text-[11px]"><span class="text-zinc-400">Pincode</span><span class="font-bold">${af.pincode} ✅</span></div>`;
+      if(af.address) sh+=`<div class="text-[11px] mt-1"><span class="text-zinc-400">Address: </span><span class="text-zinc-300">${af.address}</span></div>`;
+      sh+=`</div>`;
+      if(j.manual_needed && j.manual_needed.length>0){
+        sh+=`<div class="mt-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2 text-[10px] text-yellow-300">⚠️ Manual bharna padega official site pe: ${j.manual_needed.join(', ')}</div>`;
+      }
+    }
+    const official=OFFICIAL_MAP[tid];
+    if(official){
+      if(j.missing.length==0) sh+=`<a href="${official}" target="_blank" class="mt-3 block text-center bg-white text-black rounded-xl p-3 font-bold text-sm">Go to Official Portal → (CAPTCHA/OTP/PAYMENT aap karenge)</a>`;
+      else sh+=`<a href="${official}" target="_blank" class="mt-3 block text-center bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-xl p-3 font-bold text-[11px]">Official Site Dekho (Docs pehle upload karo)</a>`;
+    }
+    sh+=`<button onclick="copySmart()" class="mt-2 w-full bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-[11px]">📋 Copy Smart Data</button>`;
+    sh+=`</div>`;
+    smartBox.innerHTML=sh;
+    smartBox.classList.remove('hidden');
+    window._lastSmart = af;
   }catch(e){ preview.innerHTML=`<span class="text-red-400 text-[11px]">Fail: ${e}</span>`; }
+}
+function copySmart(){
+  const af=window._lastSmart||{}; const txt=JSON.stringify(af, null, 2);
+  navigator.clipboard.writeText(txt).then(()=>alert('Copied!\\n'+txt));
 }
 window.addEventListener('load', ()=>{
   const m=document.getElementById('consentModal');
@@ -220,7 +335,7 @@ window.addEventListener('load', ()=>{
 def home(): return HTML_PAGE
 
 @app.get("/api/status")
-def status(): return {"templates": len(TEMPLATES), "ocr": OCR_AVAILABLE}
+def status(): return {"templates": len(TEMPLATES), "phase": "5-smart-fill", "ocr": OCR_AVAILABLE, "official_urls": len(OFFICIAL_URLS)}
 
 @app.post("/upload-document")
 async def upload_doc(background_tasks: BackgroundTasks, user_id: str = Form(...), doc_type: str = Form(...), file: UploadFile = File(...)):
@@ -238,13 +353,15 @@ async def upload_doc(background_tasks: BackgroundTasks, user_id: str = Form(...)
 @app.get("/vault/{user_id}")
 def vault(user_id: str):
     sb = get_sb()
+    if not sb: return {"docs":[]}
     res = sb.table("user_vault").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     return {"docs": res.data}
 
 @app.delete("/vault/{record_id}")
 def delete_doc(record_id: str):
     sb = get_sb()
-    sb.table("user_vault").delete().eq("id", record_id).execute()
+    if sb:
+        sb.table("user_vault").delete().eq("id", record_id).execute()
     return {"deleted": True}
 
 @app.get("/api/fill-preview/{template_id}/{user_id}")
@@ -252,7 +369,50 @@ def fill_preview(template_id: str, user_id: str):
     if template_id not in TEMPLATES: raise HTTPException(404, "Template not found")
     tpl = TEMPLATES[template_id]
     sb = get_sb()
-    res = sb.table("user_vault").select("doc_type").eq("user_id", user_id).execute()
-    you_have = list(set([r["doc_type"] for r in res.data]))
+    you_have=[]
+    if sb:
+        res = sb.table("user_vault").select("doc_type").eq("user_id", user_id).execute()
+        you_have = list(set([r["doc_type"] for r in res.data]))
     missing = [d for d in tpl["required_docs"] if d not in you_have]
     return {"template_name": tpl["name"], "required_docs": tpl["required_docs"], "you_have": you_have, "missing": missing}
+
+@app.get("/api/smart-fill/{template_id}/{user_id}")
+def smart_fill(template_id: str, user_id: str):
+    if template_id not in TEMPLATES: raise HTTPException(404, "Template not found")
+    tpl = TEMPLATES[template_id]
+    sb = get_sb()
+    you_have=[]
+    merged={}
+    if sb:
+        res = sb.table("user_vault").select("*").eq("user_id", user_id).execute()
+        for row in res.data:
+            dt = row.get("doc_type")
+            if dt and dt not in you_have:
+                you_have.append(dt)
+            ocr = row.get("ocr_data")
+            if isinstance(ocr, dict):
+                for k,v in ocr.items():
+                    if k in ["status","error","raw_snippet","doc_type","no_ocr_needed","ocr_done_no_data","ocr_failed"]:
+                        continue
+                    if v and k not in merged:
+                        merged[k]=v
+    missing = [d for d in tpl["required_docs"] if d not in you_have]
+    manual_needed = []
+    for pk in ["full_name","dob"]:
+        if pk not in merged:
+            manual_needed.append(pk)
+    if "caste_certificate" in tpl["required_docs"] and "caste_category" not in merged:
+        manual_needed.append("caste_category (certificate pe hai)")
+    if "income_certificate" in tpl["required_docs"]:
+        manual_needed.append("income amount")
+    return {
+        "template_name": tpl["name"],
+        "required_docs": tpl["required_docs"],
+        "you_have": you_have,
+        "missing": missing,
+        "auto_filled": merged,
+        "auto_filled_count": len(merged),
+        "manual_needed": manual_needed,
+        "ready_for_portal": len(missing)==0,
+        "official_url": OFFICIAL_URLS.get(template_id,"")
+    }
