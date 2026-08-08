@@ -90,38 +90,61 @@ def do_ocr_background(record_id, file_bytes, doc_type):
 TEMPLATES_JSON = str(list(TEMPLATES.items())).replace("'", '"') # not used, we build JS manually
 
 HTML_PAGE = """
-<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-[#0f0f0f] text-white p-3"><div class="max-w-md mx-auto">
-<h1 class="text-xl font-bold">Cyber Cafe Agent - Phase 4B</h1><p class="text-[11px] text-zinc-400">Fast Upload + Category + Background OCR</p>
+<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>body{font-family:'Inter',sans-serif}</style>
+</head>
+<body class="bg-[#08080A] text-white min-h-screen">
+<div class="max-w-[480px] mx-auto p-4">
 
-<div class="mt-3 bg-zinc-900 p-3 rounded-xl">
-<input id="user_id" value="yuvraj_test" class="w-full p-2 rounded bg-black text-sm border border-zinc-800">
-<div class="flex gap-1 mt-2 overflow-x-auto text-[10px] pb-1">
-<button onclick="filterCat('all')" class="cat-btn bg-white text-black px-3 py-1 rounded-full font-bold" data-cat="all">All</button>
-<button onclick="filterCat('exam')" class="cat-btn bg-zinc-800 px-3 py-1 rounded-full" data-cat="exam">Exam</button>
-<button onclick="filterCat('certificate')" class="cat-btn bg-zinc-800 px-3 py-1 rounded-full" data-cat="certificate">Certificate</button>
-<button onclick="filterCat('new')" class="cat-btn bg-zinc-800 px-3 py-1 rounded-full" data-cat="new">New ID</button>
-<button onclick="filterCat('correction')" class="cat-btn bg-zinc-800 px-3 py-1 rounded-full" data-cat="correction">Correction</button>
-<button onclick="filterCat('scholarship')" class="cat-btn bg-zinc-800 px-3 py-1 rounded-full" data-cat="scholarship">Scholarship</button>
+<!-- Header -->
+<div class="flex justify-between items-center mb-5">
+<div class="flex items-center gap-2">
+<div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center font-black">C</div>
+<div><h1 class="font-extrabold leading-none">CyberCafe Agent</h1><p class="text-[10px] text-zinc-500">Phase 4B • Fast + OCR</p></div>
 </div>
-<select id="template" class="w-full mt-2 p-2 rounded bg-black text-sm border border-zinc-800"></select>
-<button onclick="checkFill()" class="w-full mt-2 bg-blue-600 p-2 rounded text-sm font-bold">Check Docs & Preview</button>
-<div id="preview" class="mt-2 text-xs bg-black p-2 rounded min-h-[50px] border border-zinc-800"></div>
+<div class="flex items-center gap-2 text-[10px]"><span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span><span class="bg-zinc-900 border border-zinc-800 px-2 py-1 rounded-full">LIVE</span></div>
 </div>
 
-<div class="mt-3 bg-zinc-900 p-3 rounded-xl">
-<h2 class="text-sm font-bold">Upload (Fast)</h2>
-<select id="doc_type" class="w-full mt-2 p-2 rounded bg-black text-sm border border-zinc-800">
-<option>aadhaar_front</option><option>aadhaar_back</option><option>pan_card</option><option>photo</option><option>signature</option><option>10th_marksheet</option><option>income_certificate</option><option>domicile_certificate</option><option>bank_passbook</option><option>caste_certificate</option>
-</select>
-<input id="file" type="file" class="w-full mt-2 text-xs">
-<button onclick="upload()" class="w-full mt-2 bg-white text-black p-2 rounded font-bold text-sm">Upload Fast</button>
-<p id="status" class="text-[11px] mt-1 text-zinc-400"></p>
+<!-- User Card -->
+<div class="bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
+<div class="flex justify-between items-center mb-3"><p class="text-xs font-semibold text-zinc-400">👤 Operator ID</p><span class="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full">Auto Vault ON</span></div>
+<input id="user_id" value="yuvraj_test" class="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm focus:outline-none focus:border-violet-500">
 </div>
 
-<div class="mt-3 bg-zinc-900 p-3 rounded-xl">
-<div class="flex justify-between"><h2 class="text-sm font-bold">Mera Vault (Auto)</h2><button onclick="loadVault()" class="text-[10px] bg-zinc-800 px-2 py-1 rounded">Refresh</button></div>
-<div id="vault" class="mt-2 space-y-2 text-xs"></div>
+<!-- Intent Selector -->
+<div class="mt-4 bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
+<h2 class="font-bold text-[13px] tracking-wide">🎯 INTENT SELECTOR</h2>
+<div class="flex gap-2 mt-3 overflow-x-auto pb-2 scrollbar-hide">
+<button onclick="filterCat('all')" data-cat="all" class="cat-btn whitespace-nowrap bg-white text-black px-4 py-2 rounded-full text-xs font-bold">All Forms</button>
+<button onclick="filterCat('exam')" data-cat="exam" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">📚 Exam</button>
+<button onclick="filterCat('certificate')" data-cat="certificate" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">📜 Certificate</button>
+<button onclick="filterCat('new')" data-cat="new" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">🆕 New ID</button>
+<button onclick="filterCat('correction')" data-cat="correction" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">✏️ Correction</button>
+<button onclick="filterCat('scholarship')" data-cat="scholarship" class="cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs">🎓 Scholarship</button>
+</div>
+<select id="template" class="w-full mt-2 bg-black border border-zinc-800 rounded-xl p-3 text-sm"></select>
+<button onclick="checkFill()" class="w-full mt-3 bg-gradient-to-r from-violet-600 to-blue-600 rounded-xl p-3 text-sm font-bold">Check Docs & Preview →</button>
+<div id="preview" class="mt-3 bg-[#0A0A0B] border border-dashed border-zinc-800 rounded-xl p-3 min-h-[70px] text-xs text-zinc-500">Select a form to see required docs</div>
+</div>
+
+<!-- Upload -->
+<div class="mt-4 bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
+<div class="flex justify-between items-center"><h2 class="font-bold text-[13px]">⚡ FAST UPLOAD</h2><span class="text-[10px] bg-violet-500/10 text-violet-300 border border-violet-500/20 px-2 py-0.5 rounded-full">BG OCR ON</span></div>
+<select id="doc_type" class="w-full mt-3 bg-black border border-zinc-800 rounded-xl p-3 text-sm"><option>aadhaar_front</option><option>aadhaar_back</option><option>pan_card</option><option>photo</option><option>signature</option><option>10th_marksheet</option><option>income_certificate</option><option>domicile_certificate</option><option>caste_certificate</option><option>bank_passbook</option></select>
+<label class="mt-3 flex flex-col items-center justify-center w-full border-2 border-dashed border-zinc-800 rounded-xl p-4 bg-black/50">
+<span class="text-xs text-zinc-400">📁 Tap to choose file</span><span id="fname" class="text-[11px] text-zinc-500 mt-1">No file chosen</span>
+<input id="file" type="file" class="hidden" onchange="document.getElementById('fname').innerText=this.files[0]?.name||'No file chosen'">
+</label>
+<button onclick="upload()" class="w-full mt-3 bg-white text-black rounded-xl p-3 text-sm font-extrabold">Upload Fast</button>
+<p id="status" class="text-[11px] mt-2 text-zinc-400"></p>
+</div>
+
+<!-- Vault -->
+<div class="mt-4 bg-[#121214] border border-zinc-800/80 rounded-[20px] p-4">
+<div class="flex justify-between items-center"><h2 class="font-bold text-[13px]">🗄️ MERA VAULT</h2><button onclick="loadVault()" class="text-[11px] bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full">Refresh ↻</button></div>
+<div id="vault" class="mt-3 space-y-2"></div>
 </div>
 
 </div>
@@ -148,65 +171,40 @@ const TEMPLATES = {
   "ibps_po": {"name":"IBPS PO","category":"exam","required_docs":["aadhaar_front","graduation_degree","photo","signature","bank_passbook"]},
   "up_scholarship": {"name":"UP Scholarship","category":"scholarship","required_docs":["aadhaar_front","income_certificate","10th_marksheet","bank_passbook","photo"]}
 };
-
 function filterCat(cat){
-  document.querySelectorAll('.cat-btn').forEach(b=>{b.className='cat-btn bg-zinc-800 px-3 py-1 rounded-full';});
-  document.querySelector(`[data-cat="${cat}"]`).className='cat-btn bg-white text-black px-3 py-1 rounded-full font-bold';
+  document.querySelectorAll('.cat-btn').forEach(b=>{b.className='cat-btn whitespace-nowrap bg-[#1E1E20] border border-zinc-800 px-4 py-2 rounded-full text-xs';});
+  document.querySelector(`[data-cat="${cat}"]`).className='cat-btn whitespace-nowrap bg-white text-black px-4 py-2 rounded-full text-xs font-bold';
   const sel=document.getElementById('template'); sel.innerHTML='';
-  Object.entries(TEMPLATES).forEach(([k,v])=>{
-    if(cat==='all' || v.category===cat){
-      const o=document.createElement('option'); o.value=k; o.textContent=v.name; sel.appendChild(o);
-    }
-  });
+  Object.entries(TEMPLATES).forEach(([k,v])=>{ if(cat==='all'||v.category===cat){ const o=document.createElement('option'); o.value=k; o.textContent=v.name; sel.appendChild(o); } });
 }
-
 async function upload(){
-  const uid=document.getElementById('user_id').value;
-  const dtype=document.getElementById('doc_type').value;
-  const f=document.getElementById('file').files[0];
-  if(!uid||!f){alert('File select kar');return;}
+  const uid=document.getElementById('user_id').value; const dtype=document.getElementById('doc_type').value; const f=document.getElementById('file').files[0];
+  if(!f){alert('File choose kar');return;}
   const fd=new FormData(); fd.append('user_id',uid); fd.append('doc_type',dtype); fd.append('file',f);
-  document.getElementById('status').innerText='Uploading... (2 sec)';
-  try{
-    const r=await fetch('/upload-document',{method:'POST',body:fd});
-    const j=await r.json();
-    if(j.success){
-      document.getElementById('status').innerText='✅ Uploaded! OCR background me chal raha hai, 30 sec baad Refresh dabana';
-      loadVault();
-      setTimeout(loadVault, 30000);
-      setTimeout(loadVault, 60000);
-    }else{document.getElementById('status').innerText='Fail: '+(j.error||'unknown');}
-  }catch(e){document.getElementById('status').innerText='Network error, fir try kar';}
+  document.getElementById('status').innerText='⏳ Uploading...';
+  const r=await fetch('/upload-document',{method:'POST',body:fd}); const j=await r.json();
+  if(j.success){ document.getElementById('status').innerHTML='✅ <b>Uploaded!</b> OCR background me, 30 sec me Refresh dabana'; loadVault(); setTimeout(loadVault,30000); setTimeout(loadVault,60000); }
 }
-
 async function loadVault(){
-  const uid=document.getElementById('user_id').value; if(!uid)return;
-  const v=document.getElementById('vault'); v.innerHTML='Loading...';
-  const r=await fetch('/vault/'+uid); const j=await r.json();
-  v.innerHTML='';
+  const uid=document.getElementById('user_id').value; const v=document.getElementById('vault'); v.innerHTML='<p class="text-xs text-zinc-500">Loading...</p>';
+  const r=await fetch('/vault/'+uid); const j=await r.json(); v.innerHTML='';
   (j.docs||[]).forEach(d=>{
-    let ocrTxt='';
-    if(d.ocr_data){
-      if(d.ocr_data.aadhaar_no) ocrTxt=`<span class="text-green-400">Aadhaar:${d.ocr_data.aadhaar_no}</span>`;
-      else if(d.ocr_data.pan_no) ocrTxt=`<span class="text-green-400">PAN:${d.ocr_data.pan_no}</span>`;
-      else if(d.ocr_data.status==='processing') ocrTxt=`<span class="text-yellow-400">OCR processing...</span>`;
-    }
-    v.innerHTML+=`<div class="bg-black p-2 rounded border border-zinc-800"><div class="flex justify-between"><b>${d.doc_type}</b><a href="${d.file_url}" target="_blank" class="text-blue-400">View</a></div><div class="text-[10px] text-zinc-500">${d.file_name||''}<br>${ocrTxt}</div></div>`;
+    let badge=''; let border='border-zinc-800';
+    if(d.ocr_data?.aadhaar_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">Aadhaar:${d.ocr_data.aadhaar_no}</span>`; border='border-green-500/20';}
+    else if(d.ocr_data?.pan_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">PAN:${d.ocr_data.pan_no}</span>`; border='border-green-500/20';}
+    else if(d.ocr_data?.status==='processing'){badge=`<span class="bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full text-[10px] animate-pulse">OCR processing...</span>`; border='border-yellow-500/20';}
+    v.innerHTML+=`<div class="bg-black border ${border} rounded-xl p-3 flex justify-between items-center"><div><p class="text-xs font-bold">${d.doc_type}</p><p class="text-[10px] text-zinc-500 truncate w-[180px]">${d.file_name||''}</p><div class="mt-1">${badge}</div></div><a href="${d.file_url}" target="_blank" class="text-[11px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">View</a></div>`;
   });
 }
-
 async function checkFill(){
-  const uid=document.getElementById('user_id').value;
-  const tid=document.getElementById('template').value;
+  const uid=document.getElementById('user_id').value; const tid=document.getElementById('template').value;
   const r=await fetch(`/api/fill-preview/${tid}/${uid}`); const j=await r.json();
-  let h=`<b>${j.template_name}</b><br><span class="text-zinc-400">Need: ${j.required_docs.join(', ')}</span><br><br>`;
-  if(j.missing.length>0) h+=`<span class="text-red-400">❌ Missing: ${j.missing.join(', ')}</span>`;
-  else h+=`<span class="text-green-400 font-bold">✅ All Docs Ready - Apply kar sakte ho</span>`;
-  h+=`<br><br><span class="text-zinc-500">You have: ${j.you_have.join(', ')||'none'}</span>`;
+  let h=`<p class="font-bold text-white">${j.template_name}</p><p class="text-[11px] text-zinc-500 mt-1">Need: ${j.required_docs.join(', ')}</p>`;
+  if(j.missing.length>0) h+=`<div class="mt-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-red-300">❌ Missing: ${j.missing.join(', ')}</div>`;
+  else h+=`<div class="mt-2 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-green-300 font-bold">✅ Ready to Apply</div>`;
   document.getElementById('preview').innerHTML=h;
 }
-
-window.addEventListener('load', ()=>{filterCat('all'); setTimeout(loadVault, 1000);});
+window.addEventListener('load', ()=>{filterCat('all'); setTimeout(loadVault,800);});
 </script></body></html>
 """
 
