@@ -50,6 +50,29 @@ TEMPLATES = {
     "up_scholarship": {"name":"UP Scholarship","category":"scholarship","required_docs":["aadhaar_front","income_certificate","10th_marksheet","bank_passbook","photo"]},
 }
 
+OFFICIAL_URLS = {
+ "aadhaar_correction": "https://myaadhaar.uidai.gov.in/",
+ "pan_new": "https://www.tin-nsdl.com/services/pan/",
+ "pan_correction": "https://www.tin-nsdl.com/services/pan/",
+ "income_certificate": "https://edistrict.up.gov.in/",
+ "domicile_certificate": "https://edistrict.up.gov.in/",
+ "caste_certificate": "https://edistrict.up.gov.in/",
+ "ews_new": "https://edistrict.up.gov.in/",
+ "voter_new": "https://voters.eci.gov.in/",
+ "passport_new": "https://portal2.passportindia.gov.in/",
+ "ayushman_new": "https://beneficiary.nha.gov.in/",
+ "ration_new": "https://fcs.up.gov.in/",
+ "ssc_gd": "https://ssc.nic.in/",
+ "ssc_cgl": "https://ssc.nic.in/",
+ "up_police_constable": "https://uppbpb.gov.in/",
+ "up_police_si": "https://uppbpb.gov.in/",
+ "railway_group_d": "https://www.rrbcdg.gov.in/",
+ "cuet_ug": "https://cuet.samarth.ac.in/",
+ "nda": "https://www.upsc.gov.in/",
+ "ibps_po": "https://www.ibps.in/",
+ "up_scholarship": "https://scholarship.up.gov.in/"
+}
+
 def get_sb():
     return create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
@@ -96,6 +119,13 @@ HTML_PAGE = """
 <style>body{font-family:'Inter',sans-serif}</style>
 </head>
 <body class="bg-[#08080A] text-white min-h-screen">
+<div id="consentModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+<div class="bg-[#121214] border border-zinc-700 rounded-[20px] p-5 max-w-[380px]">
+<h3 class="font-bold text-sm">🔒 DPDP Consent (Govt. Rule)</h3>
+<p class="text-[11px] text-zinc-400 mt-2">Aapke documents sirf is form ko bharne ke liye use honge, Supabase encrypted vault me save rahenge. 30 din me auto delete.</p>
+<label class="flex gap-2 mt-3 text-[11px]"><input type="checkbox" id="consentCheck"> <span>Main sehmat hu, apne docs upload karne ke liye</span></label>
+<button onclick="if(document.getElementById('consentCheck').checked){document.getElementById('consentModal').style.display='none'; localStorage.setItem('dpdp','yes')}else{alert('Pehle tick karo')}" class="w-full mt-3 bg-white text-black rounded-xl p-2 text-sm font-bold">I Agree & Continue</button>
+</div></div>
 <div class="max-w-[480px] mx-auto p-4">
 
 <!-- Header -->
@@ -193,10 +223,41 @@ async function loadVault(){
     if(d.ocr_data?.aadhaar_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">Aadhaar:${d.ocr_data.aadhaar_no}</span>`; border='border-green-500/20';}
     else if(d.ocr_data?.pan_no){badge=`<span class="bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px]">PAN:${d.ocr_data.pan_no}</span>`; border='border-green-500/20';}
     else if(d.ocr_data?.status==='processing'){badge=`<span class="bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full text-[10px] animate-pulse">OCR processing...</span>`; border='border-yellow-500/20';}
-    v.innerHTML+=`<div class="bg-black border ${border} rounded-xl p-3 flex justify-between items-center"><div><p class="text-xs font-bold">${d.doc_type}</p><p class="text-[10px] text-zinc-500 truncate w-[180px]">${d.file_name||''}</p><div class="mt-1">${badge}</div></div><a href="${d.file_url}" target="_blank" class="text-[11px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">View</a></div>`;
+    v.innerHTML+=`<div class="bg-black border ${border} rounded-xl p-3 flex justify-between items-center"><div><p class="text-xs font-bold">${d.doc_type}</p><p class="text-[10px] text-zinc-500 truncate w-[150px]">${d.file_name||''}</p><div class="mt-1">${badge}</div></div><div class="flex gap-2 items-center"><button onclick="deleteDoc('${d.id}')" class="text-[10px] text-red-400 border border-red-500/20 bg-red-500/10 px-2 py-1 rounded-full">Del</button><a href="${d.file_url}" target="_blank" class="text-[11px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full">View</a></div></div>`;
   });
 }
+async function deleteDoc(id){
+  if(!confirm('Ye document delete kar du?')) return;
+  await fetch('/vault/'+id,{method:'DELETE'});
+  loadVault();
+}
 async function checkFill(){
+const officialMap = {
+ "aadhaar_correction":"https://myaadhaar.uidai.gov.in/",
+ "pan_new":"https://www.tin-nsdl.com/services/pan/",
+ "pan_correction":"https://www.tin-nsdl.com/services/pan/",
+ "income_certificate":"https://edistrict.up.gov.in/",
+ "domicile_certificate":"https://edistrict.up.gov.in/",
+ "caste_certificate":"https://edistrict.up.gov.in/",
+ "ews_new":"https://edistrict.up.gov.in/",
+ "voter_new":"https://voters.eci.gov.in/",
+ "passport_new":"https://portal2.passportindia.gov.in/",
+ "ayushman_new":"https://beneficiary.nha.gov.in/",
+ "ration_new":"https://fcs.up.gov.in/",
+ "ssc_gd":"https://ssc.nic.in/",
+ "ssc_cgl":"https://ssc.nic.in/",
+ "up_police_constable":"https://uppbpb.gov.in/",
+ "up_police_si":"https://uppbpb.gov.in/",
+ "railway_group_d":"https://www.rrbcdg.gov.in/",
+ "cuet_ug":"https://cuet.samarth.ac.in/",
+ "nda":"https://www.upsc.gov.in/",
+ "ibps_po":"https://www.ibps.in/",
+ "up_scholarship":"https://scholarship.up.gov.in/"
+};
+const official = officialMap[tid];
+if(official && j.missing.length==0){
+  h+=`<a href="${official}" target="_blank" class="mt-3 block text-center bg-white text-black rounded-xl p-3 font-bold">Go to Official Portal →</a>`;
+}
   const uid=document.getElementById('user_id').value; const tid=document.getElementById('template').value;
   const r=await fetch(`/api/fill-preview/${tid}/${uid}`); const j=await r.json();
   let h=`<p class="font-bold text-white">${j.template_name}</p><p class="text-[11px] text-zinc-500 mt-1">Need: ${j.required_docs.join(', ')}</p>`;
@@ -204,7 +265,15 @@ async function checkFill(){
   else h+=`<div class="mt-2 bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-green-300 font-bold">✅ Ready to Apply</div>`;
   document.getElementById('preview').innerHTML=h;
 }
-window.addEventListener('load', ()=>{filterCat('all'); setTimeout(loadVault,800);});
+window.addEventListener('load', ()=>{
+  // consent popup auto hide if already agreed
+  if(localStorage.getItem('dpdp')==='yes'){
+    const m = document.getElementById('consentModal');
+    if(m) m.style.display='none';
+  }
+  filterCat('all'); 
+  setTimeout(loadVault,800);
+});
 </script></body></html>
 """
 
@@ -242,6 +311,12 @@ def vault(user_id: str):
     res = sb.table("user_vault").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     return {"user_id": user_id, "count": len(res.data), "docs": res.data}
 
+@app.delete("/vault/{record_id}")
+def delete_doc(record_id: str):
+    sb = get_sb()
+    sb.table("user_vault").delete().eq("id", record_id).execute()
+    return {"deleted": True}
+    
 @app.get("/api/fill-preview/{template_id}/{user_id}")
 def fill_preview(template_id: str, user_id: str):
     if template_id not in TEMPLATES:
