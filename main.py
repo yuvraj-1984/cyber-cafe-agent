@@ -53,6 +53,11 @@ TEMPLATES = {
 def get_sb(): return create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
 def extract_ocr(file_bytes, doc_type):
+    try:
+        import pytesseract
+        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+    except:
+        pass 
     if not OCR_AVAILABLE:
         return {"error": "ocr_lib_not_found"}
     if doc_type not in ["aadhaar_front", "aadhaar_back", "aadhaar_combined", "pan_card", "10th_marksheet", "12th_marksheet"]:
