@@ -53,32 +53,28 @@ TEMPLATES = {
 def get_sb(): return create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
 def extract_ocr(file_bytes, doc_type):
-    try:
-        import pytesseract
-        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
-    except:
-        pass 
-    if not OCR_AVAILABLE:
-        return {"error": "ocr_lib_not_found"}
-    if doc_type not in ["aadhaar_front", "aadhaar_back", "aadhaar_combined", "pan_card", "10th_marksheet", "12th_marksheet"]:
+    if doc_type not in ["aadhaar_front", "aadhaar_back", "aadhaar_combined", "pan_card"]:
         return None
     try:
+        import pytesseract, re, io
+        pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+        from PIL import Image
         img = Image.open(io.BytesIO(file_bytes))
-        # thoda resize for better OCR
-        if img.width < 1000:
-            img = img.resize((img.width*2, img.height*2))
-        text = pytesseract.image_to_string(img, lang='eng')
-        data = {"raw_text": text[:1000]}
+        if img.width > 1200:
+            w_percent = 1200 / float(img.width)
+            h_size = int(float(img.height) * w_percent)
+            img = img.resize((1200, h_size))
+        img = img.convert('L')
+        text = pytesseract.image_to_string(img, config='--oem 3 --psm 6')
+        data = {}
         aadhaar = re.search(r'\d{4}\s\d{4}\s\d{4}', text)
         pan = re.search(r'[A-Z]{5}[0-9]{4}[A-Z]{1}', text)
         if aadhaar: data["aadhaar_no"] = aadhaar.group()
         if pan: data["pan_no"] = pan.group()
-        # DOB try
-        dob = re.search(r'\d{2}/\d{2}/\d{4}', text)
-        if dob: data["dob"] = dob.group()
-        return data
+        return data if data else None
     except Exception as e:
-        return {"error": str(e)[:200]}
+        print(f"OCR skip: {e}")
+        return None
 
 HTML_PAGE = """
 <!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.tailwindcss.com"></script></head>
